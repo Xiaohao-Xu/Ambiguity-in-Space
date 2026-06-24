@@ -1,13 +1,12 @@
-# Core ML/DL Libraries
-torch>=1.8.0       # PyTorch - Install version compatible with your CUDA, see https://pytorch.org/
-transformers>=4.0.0 # Hugging Face Transformers for models/processors
-numpy>=1.19.0       # Fundamental package for numerical computing
+# Install PyTorch separately for your CUDA version:
+# https://pytorch.org/get-started/locally/
 
-# Image/Video Processing & Visualization
-opencv-python>=4.5.0 # OpenCV for image loading, resizing, filtering
-Pillow>=8.0.0        # PIL fork for image manipulation (used by some scripts)
-matplotlib>=3.3.0    # For plotting visualizations (json_vis.py, mask_distribution.py)
-open3d>=0.13.0       # For 3D visualization (depth_3D.py)
-
-# Utilities
-tqdm>=4.50.0         # Progress bars (used in mask_eval.py)
+torch>=1.8.0
+transformers>=4.0.0
+numpy>=1.19.0
+opencv-python>=4.5.0
+Pillow>=8.0.0
+matplotlib>=3.3.0
+open3d>=0.13.0
+tqdm>=4.50.0
+scipy>=1.7.0

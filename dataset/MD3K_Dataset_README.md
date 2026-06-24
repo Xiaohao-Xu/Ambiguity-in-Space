@@ -1,126 +1,115 @@
-# MD-3k Benchmark Dataset README
+# MultiDepth-3k (MD-3k) Benchmark
 
-## 1. Introduction
+MD-3k is a real-world transparent-scene benchmark for measuring how monocular depth models resolve layered geometry.
 
-MD-3k is a benchmark dataset introduced in the paper ["Towards Ambiguity-Free Spatial Foundation Model: Rethinking and Decoupling Depth Ambiguity"](https://arxiv.org/abs/2503.06014). It is specifically designed to evaluate the ability of monocular depth estimation models, particularly foundation models, to handle **depth ambiguity** commonly found in scenes with transparent or reflective surfaces (e.g., glass).
+In transparent scenes, a single camera ray may contain two visually present and geometrically valid surfaces: a transparent foreground surface and the visible background behind it. Since a standard monocular depth model outputs one scalar depth per pixel, MD-3k evaluates which valid layer the model reports and whether paired hypotheses can jointly satisfy both layer-specific ordinal relations.
 
-The key challenges addressed by MD-3k are:
-*   **Multi-Layer Depth:** Real-world ambiguous scenes often contain multiple depth layers at the same pixel location (e.g., the glass surface and the scene behind it). Standard datasets often lack annotations for this.
-*   **Model Bias:** Existing depth models exhibit biases, preferentially estimating either the nearer or farther surface in ambiguous regions.
-*   **Lack of Evaluation Metrics:** Traditional depth metrics do not adequately capture performance in multi-layer scenarios or quantify model bias.
+## Scope
 
-MD-3k provides explicit annotations for multi-layer spatial relationships and enables the use of new metrics (SRA, ML-SRA, α) to rigorously assess model performance and bias in the context of depth ambiguity.
+MD-3k is a focused diagnostic benchmark for transparent-scene ambiguity. It is intended for analyzing depth-layer preference and multi-layer ordinal behavior, not for dense metric multi-layer depth estimation or exhaustive coverage of all transparency or material categories.
 
-## 2. Dataset Characteristics
+## Dataset contents
 
-*   **Size:** 3,161 high-resolution (typically 720p) RGB images with masks of ambiguous regions and multi-layer spatial relationship annotations.
-*   **Content:** Primarily indoor and outdoor scenes featuring glass doors, windows, display cases, etc.
-*   **Ambiguity Focus:** Primarily transparency-induced ambiguity.
-*   **Spatial Distribution:** Ambiguous regions exhibit a balanced spatial distribution with a slight center bias, reflecting natural scene compositions.
+MD-3k contains:
 
-## 3. Suggested Dataset Layout
+- 3,161 RGB images from GDD.
+- Ambiguous-region masks.
+- Sparse point-pair annotations.
+- Two layer-specific ordinal relations per point pair:
+  - **Layer 1**: transparent foreground surface.
+  - **Layer 2**: visible background behind the transparent surface.
 
-The benchmark dataset, when downloaded and extracted, should ideally be placed relative to the main project structure. The scripts in `../src` often assume a layout like this:
+The benchmark is partitioned into:
 
+- **Same subset**: foreground and background layers induce the same ordinal relation.
+- **Reverse subset**: foreground and background layers induce conflicting ordinal relations.
+
+The Reverse subset is the key diagnostic setting where a duplicated single-depth hypothesis cannot satisfy both valid layer relations.
+
+## Suggested layout
+
+```text
+data/MD-3K/
+├── images/
+│   ├── ...
+├── masks/
+│   ├── ...
+└── annotations.json
 ```
-<your_project_root>/
-├── src/
-│   └── ... (scripts)
-├── dataset/
-│   └── MD3K_Dataset_README.md # This file
-├── data/                     # Suggested data location
-│   ├── MD3K/                 # Extracted MD-3K dataset folder
-│   │   ├── images/           # RGB images 
-│   │   │   ├── 1.png
-│   │   │   └── ...
-│   │   ├── masks/            # Ground truth binary masks
-│   │   │   ├── 1.png
-│   │   │   └── ...
-│   │   └── annotations.json  # Core annotation file
-│   └── DA-2K/                # Optional: DA-2K dataset location
-│       └── ...
-└── ... (other project files)
-```
-*Remember to configure the paths inside the `../src/*.py` scripts to point to your actual `data/MD3K` (or `data/DA-2K`) location if you place them differently.*
 
-## 4. Annotation Format (`annotations.json`)
+## Annotation schema
 
-The `annotations.json` file maps image paths (relative to the `MD3K` root directory, e.g., `./images/group1/1.jpg`) to annotation pairs.
+A recommended explicit schema is:
 
 ```json
 {
-  "./images/1.jpg": [
+  "images/example.png": [
     {
-      "point1": [X1, Y1],
-      "point2": [X2, Y2],
-      "label": L
+      "point1": [x1, y1],
+      "point2": [x2, y2],
+      "foreground_label": "near",
+      "background_label": "far",
+      "subset": "reverse"
     }
-    // ... potentially more pairs for this image
-  ],
-  // ... more images
+  ]
 }
 ```
 
-*   `point1`, `point2`: A sparse pair of `[x, y]` coordinates sampled within the ambiguous region of the image.
-*   `label`: An integer indicating the target relationship for evaluation metrics:
-    *   **`label: 1`**: Targets the "first"/dominant depth layer relationship (used for SRA1). Correctness depends on the depth model type (Metric vs. Relative) as defined in `MD3K_eval.py`.
-    *   **`label: 2`**: Targets the "second"/hidden depth layer relationship (used for SRA2). Correctness depends on the depth model type (Metric vs. Relative) as defined in `MD3K_eval.py`.
-    *   **`label: 3`**: (If present) Indicates cases where the relationship is unclear or annotators were unsure. These are typically skipped during evaluation.
+If using a compact legacy schema with a single `label` field, document the mapping explicitly. Avoid describing `label = 1` as SRA(1) and `label = 2` as SRA(2), because SRA(1) and SRA(2) are evaluation targets for the foreground and background layers, not dataset subset identifiers.
 
-The dataset is also conceptually divided into subsets based on annotation consistency (see paper, Sec 3.2):
-*   **Same Subset:** Point pairs where the relative depth order between layers is consistent.
-*   **Reverse Subset:** Point pairs where the relative depth order between layers is reversed. The `label` field implicitly defines which category a sample belongs to, used by scripts like `MD3K_stat_SEP.py`.
+## Depth convention
 
-## 5. Evaluation Metrics & Corresponding Scripts
+Before comparing a model output to MD-3k ordinal labels, verify the definition of the saved prediction.
 
-MD-3k enables calculating metrics defined in the paper using scripts in `../src`:
+Some models save depth-like outputs, where larger values indicate farther points. Other models save inverse-depth or disparity-like outputs, where larger values indicate nearer points. MD-3k evaluation requires a consistent near or far convention. If the prediction is inverse depth or disparity, convert it to depth, or flip the ordinal comparison, before computing SRA(1), SRA(2), depth-layer preference, or ML-SRA.
 
-*   **SRA(1):** Accuracy for the first layer. Calculated by `../src/MD3K_stat.py`.
-*   **SRA(2):** Accuracy for the second layer. Calculated by `../src/MD3K_stat_SRA2.py`.
-*   **Depth Layer Preference (α):** Model bias (`SRA(2) - SRA(1)`). Calculate manually from SRA1/SRA2 results.
-*   **ML-SRA:** Simultaneous accuracy for both layers (requires comparing results from two different depth map sets, e.g., RGB vs LVP). Calculated by `../src/MD3K_stat_com.py`.
-*   **SRA(1) on Subsets:** Accuracy for specific subsets (e.g., 'Same'/'Reverse'). Calculated by `../src/MD3K_stat_SEP.py` (requires modifying the label filter).
+## Metrics
 
-Refer to the main project README (`../README.md`) for detailed execution instructions for these scripts.
+### SRA(1)
 
-## 6. Dataset Download
+Spatial Relationship Accuracy with respect to the transparent foreground layer.
 
-The MD-3k dataset (images, masks, annotations) can be downloaded from:
+### SRA(2)
 
-*   [Dropbox Link](<YOUR_DROPBOX_LINK_HERE>)
-*   [Google Drive Link](<YOUR_GOOGLE_DRIVE_LINK_HERE>)
+Spatial Relationship Accuracy with respect to the visible background layer.
 
-*(Please replace `<YOUR_..._LINK_HERE>` with the actual links)*
+### Depth-layer preference
 
-## 7. Usage and Citation
+```text
+alpha = SRA(2) - SRA(1)
+```
 
-1.  **Download** the MD-3k dataset using the links above.
-2.  **Organize** the extracted files (e.g., as suggested in Section 3).
-3.  **Configure paths** in `../src/*.py` scripts to point to your dataset location.
-4.  **Run evaluation scripts** located in `../src`.
+Positive `alpha` indicates stronger background-layer preference. Negative `alpha` indicates stronger foreground-layer preference.
 
-If you use the MD-3k benchmark in your research, please cite the following paper:
+### ML-SRA
+
+Multi-Layer Spatial Relationship Accuracy evaluates whether a paired output, such as RGB and LVP predictions, jointly satisfies both layer-specific ordinal relations.
+
+In the paper protocol, RGB and LVP are assigned according to the model's RGB depth-layer preference at the benchmark level:
+
+- If RGB prefers layer 1, assign RGB to layer 1 and LVP to layer 2.
+- If RGB prefers layer 2, assign RGB to layer 2 and LVP to layer 1.
+
+This is not a per-image oracle and should not be described as automatic layer selection. Alternative pairing strategies may be useful future improvements, but they should be reported separately.
+
+## Recommended use
+
+Use MD-3k to:
+
+- characterize model-intrinsic depth-layer preference,
+- compare RGB and LVP behavior,
+- evaluate RGB/LVP paired-hypothesis complementarity,
+- analyze Same and Reverse subsets separately.
+
+Do not use MD-3k to claim full dense metric multi-layer depth recovery unless additional dense ground truth and evaluation are provided.
+
+## Citation
 
 ```bibtex
-@article{xu2025towards,
-  title={Towards Ambiguity-Free Spatial Foundation Model: Rethinking and Decoupling Depth Ambiguity},
+@inproceedings{xu2026onescenetwodepths,
+  title={One Scene, Two Depths: Probing Geometric Ambiguity in Monocular Foundation Models},
   author={Xu, Xiaohao and Xue, Feng and Li, Xiang and Li, Haowei and Yang, Shusheng and Zhang, Tianyi and Johnson-Roberson, Matthew and Huang, Xiaonan},
-  journal={arXiv preprint arXiv:2503.06014},
-  year={2025}
+  booktitle={European Conference on Computer Vision (ECCV)},
+  year={2026}
 }
 ```
-
-```bibtex
-@inproceedings{
-xu2025towards,
-title={Towards Multi-Hypothesis Spatial Foundation Model: Rethinking and Decoupling Spatial Ambiguity via Laplacian Visual Prompting},
-author={Xiaohao Xu and Feng Xue and Xiang Li and Haowei Li and Tianyi Zhang and Matthew Johnson-Roberson and Xiaonan Huang},
-booktitle={ICLR 2025 Workshop on Foundation Models in the Wild},
-year={2025},
-url={https://openreview.net/forum?id=gngOFExtxN}
-}
-```
-
-## 8. Datasheet
-
-For detailed information regarding the dataset's motivation, composition, collection process, recommended uses, and limitations, please refer to the Datasheet section (Appendix D) in the supplementary material of the [arXiv paper](https://arxiv.org/abs/2503.06014).

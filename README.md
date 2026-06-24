@@ -1,224 +1,294 @@
-# 🚀 Towards Ambiguity-Free Spatial Foundation Model
+# One Scene, Two Depths: Probing Geometric Ambiguity in Monocular Foundation Models
 
-[![📄 arXiv](https://img.shields.io/badge/arXiv-2503.06014-red.svg)](https://arxiv.org/abs/2503.06014)
-[![🎥 Video Demo](https://img.shields.io/badge/Video%20Demo-Watch-blue.svg)](https://www.youtube.com/watch?v=38aSFah2jds)
-[![📝 License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![🛠️ Planned Full Code/Data Release: May 2025](https://img.shields.io/badge/Full%20Release-May%202025-brightgreen.svg)]()
+[![Paper](https://img.shields.io/badge/Paper-ECCV%202026-blue)]()
+[![arXiv](https://img.shields.io/badge/arXiv-2503.06014-red.svg)](https://arxiv.org/abs/2503.06014)
+[![Video Demo](https://img.shields.io/badge/Video-Demo-blue.svg)](https://www.youtube.com/watch?v=38aSFah2jds)
 
----
+> **What should a monocular depth model report when one camera ray contains two valid depths?**
 
-## 🔍 Introduction
+This repository accompanies the ECCV 2026 paper **One Scene, Two Depths: Probing Geometric Ambiguity in Monocular Foundation Models**.
 
-This repository supports the paper **"Towards Ambiguity-Free Spatial Foundation Model: Rethinking and Decoupling Depth Ambiguity."** It provides code for benchmarking monocular depth estimation models on standard (DA-2K) and ambiguity-focused (MD-3k) datasets, implementing Laplacian Visual Prompting (LVP), and various analysis/visualization utilities.
+Monocular depth models usually output **one scalar depth per pixel**. That assumption works well for many opaque scenes, but it becomes fragile when visibility is layered. In transparent scenes, a single ray can pass through a foreground glass surface while also observing the background behind it. In such cases, a single-output depth model must resolve the ambiguity into one reported layer. This repository studies that behavior as **depth-layer preference**.
 
-Key contributions include:
+The repository provides the code and benchmark materials to:
 
-✅ **MD-3k Benchmark**: A new dataset for evaluating multi-layer depth ambiguity and model biases. Details in [`./dataset/MD3K_Dataset_README.md`](./dataset/MD3K_Dataset_README.md).
+- measure **depth-layer preference** on **MultiDepth-3k (MD-3k)**,
+- probe frozen models with **Laplacian Visual Prompting (LVP)**,
+- evaluate paired RGB/LVP hypotheses with **Multi-Layer Spatial Relationship Accuracy (ML-SRA)**,
+- and compare against **DA-2K** as a mostly non-ambiguous ordinal-depth reference.
 
-✅ **Laplacian Visual Prompting (LVP)**: A training-free spectral prompting technique implemented in the benchmarking script.
+## Teaser
 
-✅ **Depth Bias Analysis**: Code to compute metrics revealing model layer preferences.
+![Teaser figure: probing depth-layer preference in transparent scenes](assets/readme_teaser_figure.png)
 
-<p align="center">
-  <img src="./assets/pipeline.png" width="90%" alt="Towards Ambiguity-Free Multi-Hypothesis Spatial Foundation Model"/>
-  <br>
-  <em><b>🖼️ Figure 1. Motivation:</b> 3D spatial understanding, powered by (a) sensors and (b) algorithms, has been confined to a biased single-layer depth representation. (c) Existing methods collapse in complex 3D scenarios, particularly in ambiguous scenes like those with transparency. (d) We propose Laplacian Visual Prompting (LVP) to overcome this limitation, enabling Spatial Foundation Models to derive multi-hypothesis depth, unlocking ambiguity-free spatial understanding.</em>
-</p>
+**Figure overview.**
+**(a)** Different sensing mechanisms can privilege different physical layers in transparent scenes.
+**(b)** A standard single-prediction monocular depth model also resolves layered geometry into one reported layer.
+**(c)** Transparent scenes provide a clean example of layered 3D ambiguity, where a single ray intersects more than one valid surface.
+**(d)** We probe this behavior using **Laplacian Visual Prompting (LVP)**. A frozen foundation model is queried with both RGB and Laplacian-transformed RGB, producing a paired hypothesis that can be evaluated against both valid depth layers.
 
----
+## Why this repository matters
 
-## 🏗️ Project Structure
+Most depth benchmarks ask only whether a prediction is accurate. MD-3k asks a deeper question:
 
-```.
-├── src/                      # Source code for experiments
-│   ├── depth_estimation_mp.py # Multi-GPU depth map generation (RGB, LVP)
-│   ├── DA2K_eval.py           # Evaluation script for DA-2K
-│   ├── DA2K_stat.py           # Statistics calculation for DA-2K
-│   ├── MD3K_eval.py           # Evaluation script for MD-3K
-│   ├── MD3K_stat.py           # SRA-1 calculation for MD-3K
-│   ├── MD3K_stat_SEP.py       # SRA-1/2 calculation for MD-3K (seperate)
-│   ├── MD3K_stat_SRA2.py      # SRA-2 calculation for MD-3K
-│   ├── MD3K_stat_com.py       # ML-SRA calculation for MD-3K
-├── utils/                      # Source code for utilities
-│   ├── json_vis.py            # Annotation visualization utility
-│   ├── mask_eval.py           # Mask evaluation utility
-│   ├── mask_distribution.py   # Mask distribution analysis utility
-│   ├── depth_3D.py            # Interactive 3D depth visualization utility
-│   └── vis_combined.py        # Combined visualization generation utility
-├── dataset/                  # Dataset specific information and potentially data files
-│   └── MD3K_Dataset_README.md # Detailed README for the MD-3K benchmark
-├── data/                     # (Suggested) Location for datasets (DA-2K, MD-3K images/masks/annotations)
-│   ├── DA-2K/
-│   └── MD-3K/
-├── assets/                   # Images for README
-├── requirements.txt          # Python package dependencies
-└── README.md                 # This file
+> **Which valid layer does a monocular depth model choose to report?**
+
+That shift turns transparent scenes into a diagnostic lens on how single-output depth models behave under geometric ambiguity.
+
+## Core concepts
+
+### MultiDepth-3k (MD-3k)
+
+**MD-3k** is a real-world transparent-scene benchmark with sparse ordinal labels for **two valid ray-wise depth layers**:
+
+- **Layer 1**: the transparent foreground surface.
+- **Layer 2**: the visible background behind the transparent surface.
+
+### Depth-layer preference
+
+A single-output depth model must resolve layered geometry into one reported layer. We characterize that behavior as the model's **depth-layer preference**.
+
+### Laplacian Visual Prompting (LVP)
+
+**LVP** is a deterministic, training-free spectral input transformation. In this repository, it is used as an **input-space behavioral probe**, not as a universal layer switch.
+
+### Multi-Layer Spatial Relationship Accuracy (ML-SRA)
+
+**ML-SRA** evaluates whether a paired RGB/LVP candidate set can jointly satisfy the ordinal relations of the two valid depth layers under a fixed benchmark-level assignment.
+
+## Important scope notes
+
+- LVP is **not** a universal mechanism for recovering all hidden layers.
+- ML-SRA does **not** use a per-image oracle.
+- MD-3k is a focused diagnostic benchmark for transparent-scene ambiguity.
+- LVP can reduce standard dense-depth fidelity on non-ambiguous scenes, so standard RGB inference remains the default choice for ordinary single-depth evaluation.
+
+## Repository structure
+
+```text
+.
+├── assets/                         # README figures and visual assets
+├── dataset/
+│   └── MD3K_Dataset_README.md      # MD-3k dataset documentation
+├── src/
+│   ├── depth_estimation_mp.py      # Depth generation under RGB/LVP inputs
+│   ├── DA2K_eval.py                # DA-2K ordinal evaluation
+│   ├── DA2K_stat.py                # DA-2K SRA statistics
+│   ├── MD3K_eval.py                # MD-3k ordinal evaluation
+│   ├── MD3K_stat.py                # MD-3k SRA(1)
+│   ├── MD3K_stat_SRA2.py           # MD-3k SRA(2)
+│   ├── MD3K_stat_SEP.py            # Same/Reverse subset statistics
+│   └── MD3K_stat_com.py            # ML-SRA for RGB/LVP pairs
+├── utils/
+│   ├── json_vis.py                 # Annotation visualization
+│   ├── mask_eval.py                # Mask evaluation
+│   ├── mask_distribution.py        # Ambiguous-region distribution visualization
+│   ├── depth_3D.py                 # Interactive depth visualization
+│   └── vis_combined.py             # Combined qualitative visualization
+├── README.md
+└── requirements.txt
 ```
-*(Note: You need to create the `./data` directory and place the DA-2K and MD-3K datasets inside, or configure the paths in the `src/*.py` and `utils/*.py` scripts accordingly.)*
 
----
+## Installation
 
-## ⚙️ Setup & Instructions for Experiments
+```bash
+git clone https://github.com/Xiaohao-Xu/Ambiguity-in-Space.git
+cd Ambiguity-in-Space
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/Xiaohao-Xu/Ambiguity-in-Space.git
-    cd Ambiguity-in-Space
-    ```
-2.  **Create Environment & Install Dependencies:**
-    *   Create a conda environment (or use your preferred environment manager):
-        ```bash
-        conda create -n mhsfm python=3.9 # Or your preferred python version
-        conda activate mhsfm
-        ```
-    *   Install the required Python packages:
-        ```bash
-        pip install -r requirements.txt
-        ```
-3.  **Download Datasets:**
-    *   **MD-3K Benchmark:**
-        *   Download the MD-3k dataset (including RGB images sourced from GDD, masks, and `annotations.json`) using the provided links:
-            *   [Google Drive Link (501MB)](https://drive.google.com/file/d/1bboSHFA5mzttK4Qpb_Vh2gSt1wx1CEuX/view?usp=sharing)
-        *   Place the downloaded `MD-3K.zip`, unzip it into the folder `MD-3K`, and put the folder under the suggested `./data` directory (i.e., `./data/MD-3K/`).
-        *   See [`./dataset/MD3K_Dataset_README.md`](./dataset/MD3K_Dataset_README.md) for more details on the MD-3k dataset structure and contents.
-    *   **DA-2K Benchmark:**
-        *   Obtain the DA-2K dataset by following the instructions in the [Depth Anything V2 repository](https://github.com/DepthAnything/Depth-Anything-V2).
-        *   Place the downloaded `DA-2K` folder into the suggested `./data` directory (i.e., `./data/DA-2K/`).
+conda create -n one-scene-two-depths python=3.10
+conda activate one-scene-two-depths
+pip install -r requirements.txt
+```
 
-    *(The suggested final structure would be `./data/MD-3K/...` and `./data/DA-2K/...`. If you place datasets elsewhere, remember to update the paths in the `src/*.py` scripts.)*
+Install PyTorch separately with the CUDA version appropriate for your environment.
 
----
+## Data
 
-<details>
-<summary>📊 Click to Expand: Reproducing Results (Using Scripts in ./src)</summary>
+### MD-3k
 
-This section guides you through using the scripts located in the `./src` directory to reproduce the main benchmarking experiments from the paper.
+Place the MD-3k benchmark under:
 
-**⚠️ Important:** Before running any script, **modify the hardcoded paths** inside it (e.g., `input_folder`, `output_folder`, `json_path`, `depth_res_path`, `raw_path`, dataset paths often referencing `/media/hdd2/users/xiaohao/...`) to point to your local dataset locations and desired output directories.
+```text
+data/MD-3K/
+├── images/
+├── masks/
+└── annotations.json
+```
 
-**Workflow:**
+MD-3k contains RGB images, ambiguous-region masks, and sparse ordinal labels for two valid layers. See [`dataset/MD3K_Dataset_README.md`](dataset/MD3K_Dataset_README.md) for annotation details and metric definitions.
 
-1.  **Generate Depth Maps:** Use `src/depth_estimation_mp.py`. Run multiple times for different configs (RGB, LVP, Blur) and datasets (DA-2K, MD-3K), saving outputs to *unique* directories.
-2.  **Evaluate:** Use `src/DA2K_eval.py` or `src/MD3K_eval.py` pointing to the generated depth maps.
-3.  **Calculate Statistics:** Use `src/DA2K_stat.py` or `src/MD3K_stat*.py` pointing to the evaluation JSONs.
+### DA-2K
 
-**Step-by-Step Guide:**
+For DA-2K, follow the data instructions from the Depth Anything V2 repository and place the dataset under:
 
-1.  **Generate Depth Maps (`src/depth_estimation_mp.py`)**
-    *   **Purpose:** Generate 16-bit PNG depth maps using various models.
-    *   **Configuration:** Modify internal paths. Set `gau_size` / `lvp_type` for desired input processing (RGB: 0/-1; LVP: 0/0; Blur: >0/-1). Choose appropriate `input_folder` (DA-2K or MD-3K). Set unique `output_folder`. Adjust `num_gpus`.
-    *   **Execution:** `python src/depth_estimation_mp.py` (Repeat for each config/dataset).
+```text
+data/DA-2K/
+```
 
-2.  **Evaluate on DA-2K (`src/DA2K_eval.py`)**
-    *   **Purpose:** Compare DA-2K depth maps against annotations.
-    *   **Configuration:** Modify internal paths (`json_path` to DA-2K annotations, `depth_res_path` to DA-2K depth maps from Step 1, `raw_path` to DA-2K root, `output_folder` for eval JSONs).
-    *   **Execution:** `python src/DA2K_eval.py`
+## Basic workflow
 
-3.  **Calculate DA-2K Statistics (`src/DA2K_stat.py`)**
-    *   **Purpose:** Calculate SRA for DA-2K.
-    *   **Configuration:** Modify `json_folder` to DA-2K eval JSONs from Step 2. **Adapt script loop/logic** to process all models if needed.
-    *   **Execution:** `python src/DA2K_stat.py`
+The current codebase uses **path-edited experiment scripts**. Before running each script, open the file and update dataset paths, output folders, model settings, and GPU settings for your local machine.
 
-4.  **Evaluate on MD-3K (`src/MD3K_eval.py`)**
-    *   **Purpose:** Compare MD-3K depth maps against annotations.
-    *   **Configuration:** Modify internal paths (`json_path` to MD-3K annotations, `depth_res_path` to MD-3K depth maps from Step 1, `raw_path` to MD-3K root, `output_folder` for eval JSONs).
-    *   **Execution:** `python src/MD3K_eval.py`
+The overall pipeline is:
 
-5.  **Calculate MD-3K Statistics (`src/MD3K_stat*.py`)**
-    *   **Purpose:** Calculate SRA1, SRA2, ML-SRA metrics.
-    *   **Configuration:** Modify `json_folder` (to MD-3K eval JSONs), `raw_json_path`. For `MD3K_stat_com.py`, set `json_folder_RGB`, `json_folder_LAP`.
-    *   **Execution:**
-        *   SRA1: `python src/MD3K_stat.py`
-        *   SRA1 (Subset): Modify label filter in `src/MD3K_stat_SEP.py` then run `python src/MD3K_stat_SEP.py`
-        *   SRA2: `python src/MD3K_stat_SRA2.py`
-        *   ML-SRA: Adapt logic in `src/MD3K_stat_com.py` then run `python src/MD3K_stat_com.py`
-        *   Layer Preference (α): Calculate manually: `SRA(2) - SRA(1)`.
+1. Generate depth maps under standard RGB input and LVP input.
+2. Convert predicted depth maps into ordinal point-pair predictions on MD-3k.
+3. Compute **SRA(1)** on the transparent foreground layer.
+4. Compute **SRA(2)** on the visible background layer.
+5. Compute depth-layer preference with `alpha = SRA(2) - SRA(1)`.
+6. Compute **ML-SRA** for paired RGB/LVP hypotheses.
+7. Optionally run **DA-2K** as a mostly non-ambiguous reference.
 
-</details>
+### Step 1: Generate depth maps
 
----
+Use `src/depth_estimation_mp.py` to generate predictions. The current script is configured by editing variables inside the file.
 
-<details>
-<summary>🛠️ Click to Expand: Utilities and Visualization Tools (in ./utils)</summary>
+For standard RGB inference:
 
-The `./utils` directory also contains utility scripts for analysis and visualization:
+```python
+input_folder = "./data/MD-3K/images"
+output_folder = "./outputs/md3k_rgb"
+output_vis_folder = "./outputs/md3k_rgb_vis"
 
-1.  **Annotation Visualization (`utils/json_vis.py`)**
-    *   **Purpose:** Visualize MD-3K annotations (points, labels) on images/masks.
-    *   **Configuration:** Modify internal paths for images, masks, annotations file.
-    *   **Execution:** `python utils/json_vis.py` 
+gau_size = 0
+lvp_type = -1
+```
 
-2.  **Mask Evaluation (`utils/mask_eval.py`)**
-    *   **Purpose:** Evaluate predicted segmentation masks against MD-3K ground truth masks.
-    *   **Configuration:** Modify internal paths for predicted masks (`pred_dir`), GT masks (`gt_dir`), and optionally filter based on another dir (`depth_anything_dir`).
-    *   **Execution:** `python utils/mask_eval.py`
+For LVP inference:
 
-3.  **Mask Spatial Distribution (`utils/mask_distribution.py`)**
-    *   **Purpose:** Analyze and visualize the spatial distribution of MD-3K masks.
-    *   **Configuration:** Modify internal paths for annotations file, mask directory, output directory.
-    *   **Execution:** `python utils/mask_distribution.py`
+```python
+input_folder = "./data/MD-3K/images"
+output_folder = "./outputs/md3k_lvp"
+output_vis_folder = "./outputs/md3k_lvp_vis"
 
-4.  **3D Depth Visualization (`utils/depth_3D.py`)**
-    *   **Purpose:** Interactively compare two depth maps (e.g., RGB vs LVP) in 3D, coloring by mask.
-    *   **Configuration:** Modify internal paths for the two depth directories and the mask directory.
-    *   **Execution:** `python utils/depth_3D.py <image_id>`
+gau_size = 0
+lvp_type = 1
+```
 
-5.  **Combined Visualization (`utils/vis_combined.py`)**
-    *   **Purpose:** Create static combined images (e.g., RGB, Depth1, GenRGB1, Depth2, GenRGB2).
-    *   **Configuration:** Modify internal file paths and potentially the image loading/concatenation logic.
-    *   **Execution:** `python utils/vis_combined.py` (Adapt `process_all_images` if needed).
+Run:
 
-</details>
+```bash
+python src/depth_estimation_mp.py
+```
 
----
+### Important: depth convention before ordinal evaluation
 
-## 📄 MultiDepth-3K (MD-3K) Dataset
+Before comparing predicted depth maps with MD-3k ordinal labels, verify the **definition and direction of the model output**.
 
-The MD-3k benchmark is central to this work for evaluating depth ambiguity. For detailed information about its structure, annotations, metrics, and usage, please refer to the dedicated dataset README:
+Some models output depth-like values, where larger values indicate farther points. Other models output inverse-depth or disparity-like values, where larger values indicate nearer points. MD-3k evaluation assumes a consistent near/far convention. If a model output is inverse depth or disparity, convert it to depth, or equivalently flip the ordinal comparison, before computing SRA(1), SRA(2), depth-layer preference, or ML-SRA.
 
-➡️ [`./dataset/MD3K_Dataset_README.md`](./dataset/MD3K_Dataset_README.md)
+Otherwise, near/far relations can be reversed and the reported accuracy will be incorrect.
 
----
+### Step 2: Convert depth maps into ordinal predictions
 
-## 🏆 Key Contributions Summary 
+Use `src/MD3K_eval.py` to compare each predicted depth map against the sparse MD-3k point-pair annotations.
 
-🔹 **MH-SFMs Paradigm**: Reformulating generic spatial understanding and depth estimation as multi-hypothesis inference.
+For RGB predictions, edit:
 
-🔹 **MD-3k Benchmark**: Novel dataset and metrics for multi-layer depth and bias evaluation.
+```python
+json_path = "./data/MD-3K/annotations.json"
+raw_path = "./data/MD-3K"
+depth_res_path = "./outputs/md3k_rgb"
+output_folder = "./eval/md3k_rgb"
+```
 
-🔹 **Depth Bias Analysis**: Comprehensive study of layer preference biases in foundation models.
+For LVP predictions, edit:
 
-🔹 **Laplacian Visual Prompting (LVP)**: Training-free method for multi-hypothesis depth using pre-trained models.
+```python
+json_path = "./data/MD-3K/annotations.json"
+raw_path = "./data/MD-3K"
+depth_res_path = "./outputs/md3k_lvp"
+output_folder = "./eval/md3k_lvp"
+```
 
-🔹 **Extensive Validation**: Demonstrating LVP’s benefits in multi-layer depth estimation and downstream tasks.
+Then run:
 
----
+```bash
+python src/MD3K_eval.py
+```
+
+### Step 3: Compute SRA(1), SRA(2), and depth-layer preference
+
+Foreground-layer agreement:
+
+```bash
+python src/MD3K_stat.py
+```
+
+Background-layer agreement:
+
+```bash
+python src/MD3K_stat_SRA2.py
+```
+
+Depth-layer preference:
+
+```text
+alpha = SRA(2) - SRA(1)
+```
+
+A positive `alpha` indicates stronger background-layer preference. A negative `alpha` indicates stronger foreground-layer preference.
+
+### Step 4: Compute ML-SRA for paired RGB/LVP hypotheses
+
+Use `src/MD3K_stat_com.py` to evaluate RGB and LVP outputs as a paired candidate set.
+
+In the paper protocol, RGB and LVP are paired according to the model's RGB depth-layer preference at the benchmark level:
+
+- If RGB prefers **layer 1**, assign RGB to layer 1 and LVP to layer 2.
+- If RGB prefers **layer 2**, assign RGB to layer 2 and LVP to layer 1.
+
+This is the assignment used for the paper's reported ML-SRA results. It is a fixed benchmark-level assignment, not a per-image oracle and not automatic layer selection.
+
+### Step 5: Optional DA-2K reference evaluation
+
+Use:
+
+```bash
+python src/DA2K_eval.py
+python src/DA2K_stat.py
+```
+
+Apply the same depth-convention caution here. If a model output is inverse depth or disparity, convert it or flip the ordinal comparison before reporting DA-2K results.
+
+## Visualization utilities
+
+```bash
+python utils/json_vis.py
+python utils/mask_distribution.py
+python utils/depth_3D.py
+python utils/vis_combined.py
+```
+
+These utilities help inspect MD-3k annotations, ambiguous-region masks, RGB/LVP depth outputs, and qualitative paired-hypothesis behavior. Some scripts may require local path edits.
 
 ## Citation
 
-
 ```bibtex
-@article{xu2025towards,
-  title={Towards Ambiguity-Free Spatial Foundation Model: Rethinking and Decoupling Depth Ambiguity},
+@inproceedings{xu2026onescenetwodepths,
+  title={One Scene, Two Depths: Probing Geometric Ambiguity in Monocular Foundation Models},
   author={Xu, Xiaohao and Xue, Feng and Li, Xiang and Li, Haowei and Yang, Shusheng and Zhang, Tianyi and Johnson-Roberson, Matthew and Huang, Xiaonan},
-  journal={arXiv preprint arXiv:2503.06014},
-  year={2025}
+  booktitle={European Conference on Computer Vision (ECCV)},
+  year={2026}
 }
 ```
+
+Please also cite the earlier workshop version if you use material specific to that version:
 
 ```bibtex
-@inproceedings{
-xu2025towards,
-title={Towards Multi-Hypothesis Spatial Foundation Model: Rethinking and Decoupling Spatial Ambiguity via Laplacian Visual Prompting},
-author={Xiaohao Xu and Feng Xue and Xiang Li and Haowei Li and Tianyi Zhang and Matthew Johnson-Roberson and Xiaonan Huang},
-booktitle={ICLR 2025 Workshop on Foundation Models in the Wild},
-year={2025},
-url={https://openreview.net/forum?id=gngOFExtxN}
+@inproceedings{xu2025towards,
+  title={Towards Multi-Hypothesis Spatial Foundation Model: Rethinking and Decoupling Spatial Ambiguity via Laplacian Visual Prompting},
+  author={Xiaohao Xu and Feng Xue and Xiang Li and Haowei Li and Tianyi Zhang and Matthew Johnson-Roberson and Xiaonan Huang},
+  booktitle={ICLR 2025 Workshop on Foundation Models in the Wild},
+  year={2025},
+  url={https://openreview.net/forum?id=gngOFExtxN}
 }
 ```
 
+## Acknowledgement
 
----
+We gratefully acknowledge Modal Labs for providing partial support through a generous academic compute grant.
 
-## 📫 Contact
-For updates on the full release, please ⭐ star this repo. Got questions? Reach out to Xiaohao Xu: xiaohaox[AT]umich.edu .
+## Contact
+
+For questions, please contact Xiaohao Xu at `xiaohaox[AT]umich.edu`.
