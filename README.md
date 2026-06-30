@@ -1,7 +1,7 @@
 # One Scene, Two Depths: Probing Geometric Ambiguity in Monocular Foundation Models
 
 [![Paper](https://img.shields.io/badge/Paper-ECCV%202026-blue)]()
-[![arXiv](https://img.shields.io/badge/arXiv-2503.06014-red.svg)](https://arxiv.org/abs/2503.06014)
+[![arXiv](https://img.shields.io/badge/arXiv-2606.29600-red.svg)](https://arxiv.org/abs/2606.29600)
 [![Dataset](https://img.shields.io/badge/Dataset-HuggingFace-yellow)](https://huggingface.co/datasets/xiaohaox/MultiDepth-3K-Dataset)
 [![Video Demo](https://img.shields.io/badge/Video-Demo-blue.svg)](https://www.youtube.com/watch?v=38aSFah2jds)
 
